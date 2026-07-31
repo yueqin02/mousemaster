@@ -446,7 +446,12 @@ public class ConfigurationParser {
                         childPropertiesByParentProperty, nonRootPropertyKeys,
                         referencedModesByReferencerMode, modeName, keyMatcher, keyAliases, keyResolver,
                         modeReferences, defaultComboMoveDuration, appAliases,
-                        finalDefaultComboMoveDuration, QFontDatabase::hasFamily,
+                        finalDefaultComboMoveDuration,
+                        // Invoking QFontDatabase::hasFamily initializes Qt
+                        // classes; when Qt is unavailable (overlay disabled),
+                        // accept any font name since nothing is rendered.
+                        QtManager.qtAvailable() ? QFontDatabase::hasFamily :
+                                fontName -> true,
                         allVariableNames);
             } catch (IllegalArgumentException e) {
                 IllegalArgumentException e2 =

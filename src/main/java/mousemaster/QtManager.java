@@ -49,6 +49,10 @@ public class QtManager {
     private static boolean initialized;
     private static boolean qtAvailable;
 
+    public static boolean qtAvailable() {
+        return qtAvailable;
+    }
+
     public static void initialize() throws IOException {
         if (initialized)
             return;
