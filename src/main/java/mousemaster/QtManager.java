@@ -46,7 +46,17 @@ public class QtManager {
             "qt-msvcp/msvcp140_2.dll"
     );
 
+    private static boolean initialized;
+    private static boolean qtAvailable;
+
     public static void initialize() throws IOException {
+        if (initialized)
+            return;
+        initialized = true;
+        if (!System.getProperty("os.name").toLowerCase().contains("windows")) {
+            initializeNonWindows();
+            return;
+        }
         File extractDirectory = createExtractDirectory(
                 MousemasterApplication.tempDirectory);
         for (String resourcesPath : windowsResourcesPaths) {
@@ -90,6 +100,30 @@ public class QtManager {
         // Default font engine on Windows is directwrite. Antialiasing seems better with gdi.
         QApplication.initialize(new String[] { "-platform", "windows:fontengine=gdi" });
 //        QApplication.initialize(new String[] { });
+        qtAvailable = true;
+    }
+
+    /**
+     * On macOS/Linux there are no bundled Qt libraries (yet): QtJambi extracts its
+     * own natives from the qtjambi-native-* jar, but needs a Qt installation for
+     * the Qt libraries themselves (point MOUSEMASTER_QT_LIB_PATH at its lib
+     * directory). Without Qt, mousemaster still runs, with the overlay disabled.
+     */
+    private static void initializeNonWindows() {
+        String qtLibPath = System.getenv("MOUSEMASTER_QT_LIB_PATH");
+        if (qtLibPath != null)
+            System.setProperty("io.qt.library-path-override", qtLibPath);
+        try {
+            QApplication.initialize(new String[] { });
+            qtAvailable = true;
+        } catch (Throwable e) {
+            logger.warn("Unable to initialize Qt, the overlay (indicator, grid, " +
+                        "hint labels) is disabled" +
+                        (qtLibPath == null ?
+                                ". Set MOUSEMASTER_QT_LIB_PATH to a Qt 6.8 " +
+                                "lib directory to enable it" : "") +
+                        ": " + e);
+        }
     }
 
     private static void extractResourceFile(String resourcesPath, Path extractPath)
@@ -108,11 +142,13 @@ public class QtManager {
     }
 
     public static void stop() {
-        QApplication.shutdown();
+        if (qtAvailable)
+            QApplication.shutdown();
     }
 
     public static void processEvents() {
-        QApplication.processEvents();
+        if (qtAvailable)
+            QApplication.processEvents();
     }
 
     private static File createExtractDirectory(String tempDirectory) throws IOException {

@@ -83,6 +83,21 @@
 
     <profiles>
         <profile>
+            <id>mac</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                </os>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>io.qtjambi</groupId>
+                    <artifactId>qtjambi-native-macos</artifactId>
+                    <version>6.8.2</version>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
             <id>native</id>
             <build>
                 <plugins>
