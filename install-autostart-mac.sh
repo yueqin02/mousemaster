@@ -20,6 +20,11 @@ if [ -z "$JAVA_HOME" ]; then
     echo "Set JAVA_HOME to the JDK 21+ to bundle" >&2
     exit 1
 fi
+if [ -z "$MOUSEMASTER_QT_LIB_PATH" ]; then
+    echo "Set MOUSEMASTER_QT_LIB_PATH to a Qt 6.8 lib directory (the mode" >&2
+    echo "indicator needs it)" >&2
+    exit 1
+fi
 if [ ! -f "$CONFIG" ]; then
     echo "Configuration file not found: $CONFIG" >&2
     exit 1
@@ -40,6 +45,15 @@ ditto target/classes "$INSTALL_DIR/classes"
 ditto target/lib "$INSTALL_DIR/lib"
 cp "$CONFIG" "$INSTALL_DIR/configuration/$(basename "$CONFIG")"
 
+# Only the frameworks the indicator needs, not all of Qt (2.8GB vs ~95MB).
+mkdir -p "$INSTALL_DIR/qt/lib" "$INSTALL_DIR/qt/plugins"
+for framework in QtCore QtGui QtWidgets QtDBus; do
+    ditto "$MOUSEMASTER_QT_LIB_PATH/$framework.framework" \
+        "$INSTALL_DIR/qt/lib/$framework.framework"
+done
+ditto "$MOUSEMASTER_QT_LIB_PATH/../plugins/platforms" \
+    "$INSTALL_DIR/qt/plugins/platforms"
+
 mkdir -p "$HOME/Library/LaunchAgents"
 cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -51,6 +65,8 @@ cat > "$PLIST" <<EOF
     <key>ProgramArguments</key>
     <array>
         <string>$INSTALL_DIR/jdk/bin/java</string>
+        <!-- Qt, like all Cocoa UI, must run on the process's first thread. -->
+        <string>-XstartOnFirstThread</string>
         <string>-cp</string>
         <string>$INSTALL_DIR/classes:$INSTALL_DIR/lib/*</string>
         <string>mousemaster.platform.mac.MacMain</string>
@@ -60,6 +76,13 @@ cat > "$PLIST" <<EOF
     </array>
     <key>WorkingDirectory</key>
     <string>$INSTALL_DIR</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>MOUSEMASTER_QT_LIB_PATH</key>
+        <string>$INSTALL_DIR/qt/lib</string>
+        <key>QT_PLUGIN_PATH</key>
+        <string>$INSTALL_DIR/qt/plugins</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>ProcessType</key>
@@ -72,6 +95,8 @@ cat > "$PLIST" <<EOF
 </plist>
 EOF
 
+# enable: bootstrap refuses to load a service that was disabled by hand.
+launchctl enable "gui/$(id -u)/$LABEL"
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
 echo "Installed. mousemaster starts at login and is running now."
 echo "Grant Accessibility to $INSTALL_DIR/jdk/bin/java if prompted."
