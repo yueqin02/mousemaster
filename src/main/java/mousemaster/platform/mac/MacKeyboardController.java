@@ -118,8 +118,10 @@ public class MacKeyboardController implements KeyboardController {
         }
         Pointer event = INSTANCE.CGEventCreateKeyboardEvent(eventSource,
                 (short) macKeyCode, move.press());
-        if (event == null)
+        if (event == null) {
+            logger.warn("Unable to create the key event for " + key);
             return;
+        }
         INSTANCE.CGEventSetFlags(event, currentFlags());
         logger.trace("Sending " + move);
         INSTANCE.CGEventPost(kCGHIDEventTap, event);

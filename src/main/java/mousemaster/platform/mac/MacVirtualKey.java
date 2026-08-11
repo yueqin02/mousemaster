@@ -157,6 +157,14 @@ public class MacVirtualKey {
         int scanCode = layout.scanCode(key);
         if (scanCode == -1)
             return -1;
+        // Keys such as the arrows appear twice in a layout: once on the numeric
+        // keypad (0x4D) and once as the dedicated navigation key (0xE04D).
+        // KeyboardLayout.scanCode returns the first match, the keypad one, which
+        // would inject keypad 6 instead of the right arrow. Prefer the extended
+        // scan code when it belongs to this same key.
+        int extendedScanCode = 0xE000 | scanCode;
+        if (scanCode < 0xE000 && key.equals(layout.keyFromScanCode(extendedScanCode)))
+            scanCode = extendedScanCode;
         Integer macKeyCode = macKeyCodeByScanCode.get(scanCode);
         return macKeyCode == null ? -1 : macKeyCode;
     }
