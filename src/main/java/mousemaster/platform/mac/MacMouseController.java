@@ -142,11 +142,41 @@ public class MacMouseController implements MouseController {
         postMouseEvent(type, button, x, y, 0);
     }
 
-    private void postButtonEvent(int type, int button) {
+    /** macOS default; the two clicks of a double click must be closer than this. */
+    private static final long doubleClickIntervalNanos = 500_000_000L;
+    /** A double click must not wander further than this, in points. */
+    private static final double doubleClickSlop = 5;
+
+    private int lastClickButton = -1;
+    private long lastClickNanos;
+    private Point lastClickPosition;
+    private int clickState = 1;
+
+    /**
+     * Consecutive clicks must be posted with an increasing click state, otherwise
+     * the system reads them as separate single clicks and nothing that needs a
+     * double click (opening a folder, YouTube's fullscreen toggle) reacts.
+     */
+    private void postButtonEvent(int type, int button, boolean press) {
         Point position = findMousePosition();
         if (position == null)
             return;
-        postMouseEvent(type, button, position.x(), position.y(), 1);
+        if (press) {
+            long now = System.nanoTime();
+            boolean continuesClick = button == lastClickButton &&
+                                     now - lastClickNanos < doubleClickIntervalNanos &&
+                                     lastClickPosition != null &&
+                                     Math.abs(position.x() - lastClickPosition.x()) <=
+                                     doubleClickSlop &&
+                                     Math.abs(position.y() - lastClickPosition.y()) <=
+                                     doubleClickSlop;
+            // Triple click is the highest state macOS distinguishes.
+            clickState = continuesClick ? Math.min(clickState + 1, 3) : 1;
+            lastClickButton = button;
+            lastClickNanos = now;
+            lastClickPosition = position;
+        }
+        postMouseEvent(type, button, position.x(), position.y(), clickState);
     }
 
     private void postMouseEvent(int type, int button, double x, double y,
@@ -165,37 +195,37 @@ public class MacMouseController implements MouseController {
     @Override
     public void pressLeft() {
         leftPressed = true;
-        postButtonEvent(kCGEventLeftMouseDown, kCGMouseButtonLeft);
+        postButtonEvent(kCGEventLeftMouseDown, kCGMouseButtonLeft, true);
     }
 
     @Override
     public void pressMiddle() {
         middlePressed = true;
-        postButtonEvent(kCGEventOtherMouseDown, kCGMouseButtonCenter);
+        postButtonEvent(kCGEventOtherMouseDown, kCGMouseButtonCenter, true);
     }
 
     @Override
     public void pressRight() {
         rightPressed = true;
-        postButtonEvent(kCGEventRightMouseDown, kCGMouseButtonRight);
+        postButtonEvent(kCGEventRightMouseDown, kCGMouseButtonRight, true);
     }
 
     @Override
     public void releaseLeft() {
         leftPressed = false;
-        postButtonEvent(kCGEventLeftMouseUp, kCGMouseButtonLeft);
+        postButtonEvent(kCGEventLeftMouseUp, kCGMouseButtonLeft, false);
     }
 
     @Override
     public void releaseMiddle() {
         middlePressed = false;
-        postButtonEvent(kCGEventOtherMouseUp, kCGMouseButtonCenter);
+        postButtonEvent(kCGEventOtherMouseUp, kCGMouseButtonCenter, false);
     }
 
     @Override
     public void releaseRight() {
         rightPressed = false;
-        postButtonEvent(kCGEventRightMouseUp, kCGMouseButtonRight);
+        postButtonEvent(kCGEventRightMouseUp, kCGMouseButtonRight, false);
     }
 
     @Override
