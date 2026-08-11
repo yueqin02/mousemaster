@@ -10,5 +10,8 @@ if [ -z "$JAVA_HOME" ]; then
     exit 1
 fi
 ./mvnw -q compile dependency:build-classpath -Dmdep.outputFile=target/classpath.txt || exit 1
-exec "$JAVA_HOME/bin/java" -cp "target/classes:$(cat target/classpath.txt)" \
+# -XstartOnFirstThread: Qt (like all Cocoa UI) must run on the process's first
+# thread, which is also where the CFRunLoop keyboard hook is pumped.
+exec "$JAVA_HOME/bin/java" -XstartOnFirstThread \
+    -cp "target/classes:$(cat target/classpath.txt)" \
     mousemaster.platform.mac.MacMain "$@"
