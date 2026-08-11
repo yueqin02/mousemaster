@@ -32,13 +32,19 @@ class MacIndicatorWindow {
 
     MacIndicatorWindow() {
         QWidget window = renderer.window();
-        // Float above everything, never take focus, and let clicks through to
+        // Float above everything, never take focus, and let input through to
         // whatever is underneath. Qt.WindowType.Tool is deliberately not used:
         // macOS hides tool windows whenever their application is not the active
         // one, and mousemaster never activates.
+        //
+        // WindowTransparentForInput is what actually makes the window ignore
+        // input at the window-server level. The indicator sits right on top of
+        // the cursor, so without it the window swallows scroll wheel events
+        // meant for the application underneath.
         window.setWindowFlags(Qt.WindowType.FramelessWindowHint,
                 Qt.WindowType.WindowStaysOnTopHint,
-                Qt.WindowType.WindowDoesNotAcceptFocus);
+                Qt.WindowType.WindowDoesNotAcceptFocus,
+                Qt.WindowType.WindowTransparentForInput);
         window.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents);
         window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating);
     }

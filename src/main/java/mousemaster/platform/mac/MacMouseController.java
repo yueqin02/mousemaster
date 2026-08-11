@@ -211,8 +211,10 @@ public class MacMouseController implements MouseController {
     private void postWheelEvent(int vertical, int horizontal) {
         Pointer event = INSTANCE.CGEventCreateScrollWheelEvent(eventSource,
                 kCGScrollEventUnitPixel, 2, vertical, horizontal);
-        if (event == null)
+        if (event == null) {
+            logger.warn("Unable to create the scroll wheel event");
             return;
+        }
         INSTANCE.CGEventPost(kCGHIDEventTap, event);
         MacCoreFoundation.INSTANCE.CFRelease(event);
     }
