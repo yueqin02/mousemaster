@@ -85,6 +85,13 @@ cat > "$PLIST" <<EOF
     </dict>
     <key>RunAtLoad</key>
     <true/>
+    <!-- Restart if it dies: without this a crash leaves the keyboard shortcuts
+         silently dead until the next login, with no clue as to why. -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
     <key>ProcessType</key>
     <string>Interactive</string>
     <key>StandardOutPath</key>
