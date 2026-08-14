@@ -12,6 +12,11 @@ import java.util.Set;
 public class MacScreens implements Screens {
 
     /**
+     * Static because callers create a MacScreens per call. See findScreens().
+     */
+    private static Set<Screen> lastKnownScreens = Set.of();
+
+    /**
      * Coordinates are in points, in the global display space (origin at the
      * top-left of the main display, y going down), matching CGEvent locations.
      * Scale is reported as 1.0 because all coordinates handled by mousemaster
@@ -20,6 +25,29 @@ public class MacScreens implements Screens {
      */
     @Override
     public Set<Screen> findScreens() {
+        // CGGetActiveDisplayList occasionally reports no display at all, most
+        // often within the first seconds of the process. ScreenManager throws on
+        // an empty set, which killed the login item 179 times in a single day.
+        Set<Screen> screens = activeScreens();
+        // Wait for the display list only when there is nothing to fall back on,
+        // so a later hiccup never stalls the main loop.
+        for (int attempt = 0; screens.isEmpty() && lastKnownScreens.isEmpty() &&
+                              attempt < 20; attempt++) {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            screens = activeScreens();
+        }
+        if (screens.isEmpty())
+            return lastKnownScreens;
+        lastKnownScreens = screens;
+        return screens;
+    }
+
+    private Set<Screen> activeScreens() {
         MacCoreGraphics cg = MacCoreGraphics.INSTANCE;
         int[] displays = new int[16];
         IntByReference count = new IntByReference();
