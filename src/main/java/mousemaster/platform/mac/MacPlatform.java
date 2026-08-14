@@ -71,6 +71,8 @@ public class MacPlatform implements Platform {
     private Pointer eventTapRunLoopSource;
     /** Set by the tap callback, read by eventTapDelivers(). */
     private boolean eventTapDelivered;
+    /** Next time ensureEventTapEnabled() actually checks, in System.nanoTime(). */
+    private long nextEventTapCheckNanos;
     /** kVK_Option, the key the tap self test posts a release for. */
     private static final int leftAltMacKeyCode = 58;
     private static boolean shutdown = false;
@@ -105,6 +107,27 @@ public class MacPlatform implements Platform {
     public void update(double delta) {
         keyboard.update(delta);
         overlay.update(delta);
+        ensureEventTapEnabled();
+    }
+
+    /**
+     * macOS switches off an event tap whose process stops responding. mousemaster
+     * froze for 19s (the system slept), the tap was switched off, and it stayed
+     * running and deaf for four hours before anyone noticed. The callback does
+     * re-enable the tap when it is told, but that notification is delivered
+     * through the tap itself and is of no use if the process was not running to
+     * receive it, so ask instead of waiting to be told.
+     */
+    private void ensureEventTapEnabled() {
+        long now = System.nanoTime();
+        if (now < nextEventTapCheckNanos)
+            return;
+        nextEventTapCheckNanos = now + 1_000_000_000L;
+        if (eventTapMachPort == null ||
+            INSTANCE.CGEventTapIsEnabled(eventTapMachPort))
+            return;
+        logger.warn("The keyboard event tap had been switched off, re-enabling it");
+        INSTANCE.CGEventTapEnable(eventTapMachPort, true);
     }
 
     @Override

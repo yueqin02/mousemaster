@@ -114,6 +114,8 @@ public interface MacCoreGraphics extends Library {
 
     void CGEventTapEnable(Pointer machPort, boolean enable);
 
+    boolean CGEventTapIsEnabled(Pointer machPort);
+
     long CGEventGetIntegerValueField(Pointer event, int field);
 
     void CGEventSetIntegerValueField(Pointer event, int field, long value);
