@@ -85,13 +85,13 @@ cat > "$PLIST" <<EOF
     </dict>
     <key>RunAtLoad</key>
     <true/>
-    <!-- Restart if it dies: without this a crash leaves the keyboard shortcuts
-         silently dead until the next login, with no clue as to why. -->
+    <!-- Restart however it dies. SuccessfulExit=false is not enough: mousemaster
+         has exited 0 on its own (once observed, leaving the shortcuts silently
+         dead for two days) and launchd leaves a clean exit alone. There is no
+         deliberate quit to protect; uninstalling means launchctl bootout, which
+         unloads regardless of KeepAlive. -->
     <key>KeepAlive</key>
-    <dict>
-        <key>SuccessfulExit</key>
-        <false/>
-    </dict>
+    <true/>
     <key>ProcessType</key>
     <string>Interactive</string>
     <key>StandardOutPath</key>
