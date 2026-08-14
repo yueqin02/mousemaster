@@ -67,6 +67,10 @@ public class MacPlatform implements Platform {
     private CGEventTapCallBack eventTapCallback;
     private Pointer eventTapMachPort;
     private Pointer eventTapRunLoopSource;
+    /** Set by the tap callback, read by eventTapDelivers(). */
+    private boolean eventTapDelivered;
+    /** kVK_Option, the key the tap self test posts a release for. */
+    private static final int leftAltMacKeyCode = 58;
     private static boolean shutdown = false;
 
     public MacPlatform(boolean multipleInstancesAllowed,
@@ -169,6 +173,29 @@ public class MacPlatform implements Platform {
     }
 
     private void installEventTap() {
+        createEventTap();
+        // CGEventTapCreate can hand back a valid port that never delivers
+        // anything. Observed after a launchd restart: the process looked
+        // perfectly healthy, logged no error, and every shortcut was dead.
+        for (int attempt = 1; !eventTapDelivers(); attempt++) {
+            if (attempt == 3)
+                // Exiting is the last resort that works: launchd's KeepAlive
+                // starts a whole new process, which has always come up healthy.
+                throw new IllegalStateException(
+                        "The keyboard event tap was created but does not deliver " +
+                        "any event, after " + attempt + " attempts");
+            logger.warn("The keyboard event tap does not deliver any event, " +
+                        "reinstalling it");
+            disableEventTap();
+            createEventTap();
+        }
+        logger.trace("Installed keyboard event tap successfully");
+        // Registered once, not per createEventTap() call: shutdown() is what the
+        // hook runs and reinstalling the tap does not need another one.
+        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
+    }
+
+    private void createEventTap() {
         long eventMask = (1L << kCGEventKeyDown) | (1L << kCGEventKeyUp) |
                          (1L << kCGEventFlagsChanged);
         eventTapCallback = this::eventTapCallback;
@@ -186,12 +213,37 @@ public class MacPlatform implements Platform {
                 MacCoreFoundation.INSTANCE.CFRunLoopGetCurrent(), eventTapRunLoopSource,
                 MacCoreFoundation.kCFRunLoopDefaultMode);
         INSTANCE.CGEventTapEnable(eventTapMachPort, true);
-        logger.trace("Installed keyboard event tap successfully");
-        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
+    }
+
+    /**
+     * Posts an event the tap callback recognizes as mousemaster's own, and so
+     * discards, and waits for the callback to run. The release of a modifier
+     * that is not held changes nothing for the app underneath.
+     */
+    private boolean eventTapDelivers() {
+        eventTapDelivered = false;
+        Pointer event = INSTANCE.CGEventCreateKeyboardEvent(mouse.eventSource(),
+                (short) leftAltMacKeyCode, false);
+        if (event == null)
+            return false;
+        INSTANCE.CGEventPost(kCGHIDEventTap, event);
+        MacCoreFoundation.INSTANCE.CFRelease(event);
+        long deadline = System.nanoTime() + 1_000_000_000L;
+        while (!eventTapDelivered && System.nanoTime() < deadline) {
+            pumpEvents();
+            try {
+                Thread.sleep(1);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        return eventTapDelivered;
     }
 
     private Pointer eventTapCallback(Pointer proxy, int type, Pointer event,
                                      Pointer userInfo) {
+        eventTapDelivered = true;
         clock.setLastKeyboardHookEventTime(Instant.now());
         try {
             if (type == kCGEventTapDisabledByTimeout ||
@@ -305,10 +357,19 @@ public class MacPlatform implements Platform {
             return;
         shutdown = true;
         mouse.showCursor(); // Just in case we are shutting down while cursor is hidden.
-        if (eventTapMachPort != null) {
-            INSTANCE.CGEventTapEnable(eventTapMachPort, false);
+        if (disableEventTap())
             logger.info("Disabled keyboard event tap");
-        }
+    }
+
+    private boolean disableEventTap() {
+        if (eventTapMachPort == null)
+            return false;
+        INSTANCE.CGEventTapEnable(eventTapMachPort, false);
+        if (eventTapRunLoopSource != null)
+            MacCoreFoundation.INSTANCE.CFRunLoopRemoveSource(
+                    MacCoreFoundation.INSTANCE.CFRunLoopGetCurrent(),
+                    eventTapRunLoopSource, MacCoreFoundation.kCFRunLoopDefaultMode);
+        return true;
     }
 
     @Override
