@@ -141,6 +141,8 @@ public interface MacCoreGraphics extends Library {
 
     void CGEventSetFlags(Pointer event, long flags);
 
+    long CGEventGetFlags(Pointer event);
+
     long CGEventSourceFlagsState(int stateID);
 
     Pointer CGEventSourceCreate(int stateID);

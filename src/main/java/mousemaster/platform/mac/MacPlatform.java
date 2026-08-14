@@ -30,6 +30,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static mousemaster.platform.mac.MacCoreGraphics.*;
@@ -57,7 +58,19 @@ public class MacPlatform implements Platform {
     private ModeMap modeMap;
     private KeyEvent lastKeyEvent;
     private final Set<Key> currentlyPressedNotEatenKeys = new HashSet<>();
-    private final Set<Long> pressedModifierKeyCodes = new HashSet<>();
+    /**
+     * Device dependent flag bit of each modifier key, which distinguishes the
+     * left key from the right one (the generic masks do not).
+     */
+    private static final Map<Long, Long> deviceFlagMaskByMacKeyCode = Map.of(
+            54L, 0x10L,   // right command
+            55L, 0x8L,    // left command
+            56L, 0x2L,    // left shift
+            58L, 0x20L,   // left option
+            59L, 0x1L,    // left control
+            60L, 0x4L,    // right shift
+            61L, 0x40L,   // right option
+            62L, 0x2000L); // right control
     private Point lastMousePosition;
     private Point setMousePosition;
 
@@ -348,19 +361,22 @@ public class MacPlatform implements Platform {
         boolean release;
         if (type == kCGEventFlagsChanged) {
             // Modifier keys come in as flagsChanged events with no up/down
-            // information: track pressed modifiers to derive the direction.
-            // Caps lock (57) and fn (63) are excluded: caps lock is a toggle and
-            // fn has no Windows equivalent; both are passed through.
-            if (macKeyCode == 57 || macKeyCode == 63)
+            // information. Read the direction out of the event's own flags,
+            // which state absolutely which modifiers are held.
+            //
+            // Remembering which modifiers were seen down and flipping on each
+            // event looks equivalent and is not: miss a single event and every
+            // later press reads as a release, so combos on that modifier stop
+            // matching until mousemaster is restarted. Events do get missed --
+            // macOS switches the tap off whenever the process stops responding,
+            // and anything pressed in the meantime never arrives.
+            //
+            // Caps lock and fn are excluded: caps lock is a toggle and fn has no
+            // Windows equivalent; both are passed through.
+            Long mask = deviceFlagMaskByMacKeyCode.get(macKeyCode);
+            if (mask == null)
                 return null;
-            if (pressedModifierKeyCodes.contains(macKeyCode)) {
-                pressedModifierKeyCodes.remove(macKeyCode);
-                release = true;
-            }
-            else {
-                pressedModifierKeyCodes.add(macKeyCode);
-                release = false;
-            }
+            release = (INSTANCE.CGEventGetFlags(event) & mask) == 0;
         }
         else
             release = type == kCGEventKeyUp;
