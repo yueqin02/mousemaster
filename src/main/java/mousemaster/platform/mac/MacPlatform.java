@@ -16,6 +16,7 @@ import mousemaster.MouseManager;
 import mousemaster.MousePositionListener;
 import mousemaster.Platform;
 import mousemaster.Point;
+import mousemaster.QtManager;
 import mousemaster.platform.ActiveAppFinder;
 import mousemaster.platform.Console;
 import mousemaster.platform.KeyboardController;
@@ -25,6 +26,7 @@ import mousemaster.platform.UiAutomation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
@@ -168,8 +170,42 @@ public class MacPlatform implements Platform {
                         (int) mousePosition.y());
         }
         overlay.setMessagePump(this::pumpEvents);
-        if (eventTapCallback == null)
+        if (eventTapCallback == null) {
             installEventTap();
+            flashIndicator(newModeMap);
+        }
+    }
+
+    /**
+     * Shows the indicator briefly once the tap is known to work. mousemaster has
+     * no window, no dock icon and no menu bar item, so otherwise nothing at all
+     * tells you it came up. This confirms startup only; a later death is covered
+     * by the tap self test and launchd's KeepAlive.
+     */
+    private void flashIndicator(ModeMap modeMap) {
+        Mode mode = modeMap.modes()
+                           .stream()
+                           .filter(candidate -> candidate.indicator().enabled())
+                           .findFirst()
+                           .orElse(null);
+        if (mode == null)
+            return;
+        overlay.setIndicator(mode.indicator().idleIndicator(), false, Duration.ZERO,
+                false, false, false);
+        long deadline = System.nanoTime() + 700_000_000L;
+        while (System.nanoTime() < deadline) {
+            QtManager.processEvents();
+            overlay.update(0);
+            pumpEvents();
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        overlay.hideIndicator(false);
+        QtManager.processEvents();
     }
 
     private void installEventTap() {
