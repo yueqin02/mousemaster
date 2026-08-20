@@ -67,6 +67,13 @@ cat > "$PLIST" <<EOF
         <string>$INSTALL_DIR/jdk/bin/java</string>
         <!-- Qt, like all Cocoa UI, must run on the process's first thread. -->
         <string>-XstartOnFirstThread</string>
+        <!-- Keep this. Without an explicit -Xmx the JVM sizes its maximum heap
+             at MaxRAMPercentage, 25% of physical RAM: 6GB on a 24GB Mac. An
+             idle daemon looks innocent in ps (macOS compresses the untouched
+             heap, so RSS reads ~30MB) while still accounting for 7.2GB of
+             phys_footprint. Capped, the same agent measures 136MB, so 512MB is
+             already several times what mousemaster uses. -->
+        <string>-Xmx512m</string>
         <string>-cp</string>
         <string>$INSTALL_DIR/classes:$INSTALL_DIR/lib/*</string>
         <string>mousemaster.platform.mac.MacMain</string>
