@@ -82,7 +82,7 @@ public class MacPlatform implements Platform {
     private CGEventTapCallBack eventTapCallback;
     private Pointer eventTapMachPort;
     private Pointer eventTapRunLoopSource;
-    /** Set by the tap callback, read by eventTapDelivers(). */
+    /** Set by the tap callback; read by eventTapDelivers() and the tap watchdog. */
     private boolean eventTapDelivered;
     /** Next time ensureEventTapEnabled() actually checks, in System.nanoTime(). */
     private long nextEventTapCheckNanos;
@@ -130,17 +130,46 @@ public class MacPlatform implements Platform {
      * re-enable the tap when it is told, but that notification is delivered
      * through the tap itself and is of no use if the process was not running to
      * receive it, so ask instead of waiting to be told.
+     *
+     * Asking CGEventTapIsEnabled is not enough either: a tap goes deaf while
+     * still reporting itself enabled. mousemaster ran two days that way, main
+     * loop turning, nothing in the log, every shortcut dead. So require the
+     * callback to actually run, the same way installEventTap() does at startup.
+     *
+     * Real keystrokes prove the tap works and cost nothing, so only probe once
+     * nothing has arrived on its own -- that keeps the posted event out of the
+     * way whenever the keyboard is in use.
      */
     private void ensureEventTapEnabled() {
         long now = System.nanoTime();
         if (now < nextEventTapCheckNanos)
             return;
-        nextEventTapCheckNanos = now + 1_000_000_000L;
-        if (eventTapMachPort == null ||
-            INSTANCE.CGEventTapIsEnabled(eventTapMachPort))
+        nextEventTapCheckNanos = now + 5_000_000_000L;
+        if (eventTapMachPort == null)
             return;
-        logger.warn("The keyboard event tap had been switched off, re-enabling it");
-        INSTANCE.CGEventTapEnable(eventTapMachPort, true);
+        if (eventTapDelivered) {
+            eventTapDelivered = false;
+            return;
+        }
+        if (!INSTANCE.CGEventTapIsEnabled(eventTapMachPort)) {
+            logger.warn("The keyboard event tap had been switched off, re-enabling it");
+            INSTANCE.CGEventTapEnable(eventTapMachPort, true);
+        }
+        if (eventTapDelivers()) {
+            eventTapDelivered = false;
+            return;
+        }
+        logger.warn("The keyboard event tap no longer delivers any event, " +
+                    "reinstalling it");
+        disableEventTap();
+        createEventTap();
+        if (!eventTapDelivers())
+            // Exiting is the last resort that works: launchd's KeepAlive starts
+            // a whole new process, which has always come up healthy.
+            throw new IllegalStateException(
+                    "The keyboard event tap no longer delivers any event, even " +
+                    "after being reinstalled");
+        eventTapDelivered = false;
     }
 
     @Override
