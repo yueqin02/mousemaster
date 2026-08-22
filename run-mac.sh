@@ -12,6 +12,9 @@ fi
 ./mvnw -q compile dependency:build-classpath -Dmdep.outputFile=target/classpath.txt || exit 1
 # -XstartOnFirstThread: Qt (like all Cocoa UI) must run on the process's first
 # thread, which is also where the CFRunLoop keyboard hook is pumped.
-exec "$JAVA_HOME/bin/java" -XstartOnFirstThread \
+# -Xmx512m: without it the JVM sizes its maximum heap at MaxRAMPercentage, 25%
+# of physical RAM (6GB on a 24GB Mac), and reserves that much footprint for a
+# process that measures 136MB when capped.
+exec "$JAVA_HOME/bin/java" -XstartOnFirstThread -Xmx512m \
     -cp "target/classes:$(cat target/classpath.txt)" \
     mousemaster.platform.mac.MacMain "$@"

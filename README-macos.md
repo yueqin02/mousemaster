@@ -59,6 +59,10 @@ Any of the configurations in `configuration/` work (key aliases are
 us-qwerty based; visual feedback is limited until the overlay is
 implemented).
 
+Both `run-mac.sh` and the LaunchAgent written by `install-autostart-mac.sh`
+pass `-Xmx512m`: without an explicit cap the JVM claims 25% of physical RAM as
+its maximum heap (6GB on a 24GB Mac) and keeps that footprint while idle.
+
 ## Implementation notes
 
 - `MacPlatform` mirrors `WindowsPlatform`: the CGEventTap is a run-loop
